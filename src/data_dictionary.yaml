@@ -1,0 +1,39 @@
+synonyms:
+  EBITDA: ["EBITDA", "EBIDTA", "earnings before interest tax depreciation amortisation", "operating cash profit"]
+  EBIT: ["EBIT", "operating profit"]
+  Revenue from Operation: ["revenue", "sales", "top line", "revenue from operation"]
+  Depreciation and Amortization: ["depreciation", "amortization", "D&A", "depreciation and amortisation"]
+  Equity: ["equity", "shareholders equity"]
+  Average capital employed: ["average capital employed", "avg capital employed"]
+  Capital employed: ["capital employed"]
+  Total Cargo (MMT): ["total cargo", "cargo volume", "total cargo mmt", "cargo volumes", "volumes"]
+  Port EBITDA: ["port ebitda"]
+  EBIT Margin: ["ebit margin"]
+  EBITDA Margin: ["ebitda margin"]
+  CAGR: ["cagr", "compound annual growth"]
+  Finance Cost: ["finance cost"]
+  Interest and Bank Charges: ["interest", "interest and bank charges"]
+  Foreign Exchange Loss/(Gain) (net): ["forex", "foreign exchange"]
+  Depreciation: ["depreciation"]
+  Profit Before Tax: ["pbt", "profit before tax"]
+  Share from JV and associates : ["share of jv"]
+  EBITDA %: ["ebitda %", "ebitda margin"]
+  Operating Cost: ["operating cost", "opex"]
+  Total Cost: ["total cost"]
+  Other Income: ["other income"]
+  Short term borrowing: ["short term borrowing"]
+  Long term borrowing: ["long term borrowing"]
+  Total sources: ["total sources"]
+  Total uses: ["total uses"]
+  Cash and cash equivalent and bank: ["cash", "cash balance"]
+  Current investment: ["current investment", "current investments"]
+  EBIT Growth: ["ebit growth"]
+
+scopes:
+  finance: ["revenue", "ebitda", "ebit", "profit", "equity", "capital"]
+  operations: ["cargo", "volume", "port", "cars"]
+
+unsupported:
+  - share price
+  - stock market
+  - competitor analysis

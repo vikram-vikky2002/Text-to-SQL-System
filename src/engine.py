@@ -19,6 +19,7 @@ class QAEngine:
         """Return (answer, status, method) where method is 'LLM' or 'heuristic'."""
         lower_q = question.lower()
         method = 'heuristic'
+        
         # Deterministic YOY growth handling
         yoy_match = None
         if 'year over year growth' in lower_q or 'yoy growth' in lower_q:
@@ -32,6 +33,9 @@ class QAEngine:
             cap_resp = self._compare_capital_ebit_trend(question)
             if cap_resp:
                 return cap_resp, 'OK', method
+        # Restrict LLM usage to analytical comparative queries (exclude pure rank/top/per formatting)
+        use_llm = any(k in lower_q for k in ['growth','compare','change','trend','ratio','correlation','forecast','explain']) and self.llm.available()
+        
         # Multi-metric combined query detection
         multi_metric = (("ebitda" in lower_q and "revenue" in lower_q) or 'summary' in lower_q or 'performance' in lower_q or 'ebitda margin' in lower_q)
         # Revenue + EBITDA margin trend comparison (heuristic)
@@ -39,16 +43,14 @@ class QAEngine:
             comp = self._compare_revenue_margin_trend(question)
             if comp:
                 return comp, 'OK', method
-        # Allow LLM on comparative growth queries even if multi-metric terms present
-        if multi_metric and not any(k in lower_q for k in ['growth','compare','change','trend']):
-            return self._multi_metric(question), 'OK', method
-        # Restrict LLM usage to analytical comparative queries (exclude pure rank/top/per formatting)
-        use_llm = any(k in lower_q for k in ['growth','compare','change','trend','ratio','correlation','forecast','explain']) and self.llm.available()
+        
         # Direct heuristic correlation override
         if 'correlation' in lower_q and 'revenue' in lower_q and ('margin' in lower_q or 'ebitda' in lower_q):
             corr = self._correlate_revenue_margin(question)
             if corr:
                 return corr, 'OK', method
+        
+        # Try LLM for analytical queries
         if use_llm:
             llm_sql, llm_status = self.llm.generate_sql(question)
             if llm_status == 'OK' and llm_sql:

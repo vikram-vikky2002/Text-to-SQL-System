@@ -8,7 +8,8 @@ import requests
 
 ROOT = Path(__file__).resolve().parent.parent
 
-SAFE_SQL_REGEX = re.compile(r"^\s*SELECT\b", re.IGNORECASE)
+# Allow SELECT and WITH (CTE) statements
+SAFE_SQL_REGEX = re.compile(r"^\s*(SELECT|WITH)\b", re.IGNORECASE)
 FORBIDDEN_REGEX = re.compile(r"\b(UPDATE|DELETE|INSERT|DROP|ALTER|CREATE\s+TABLE)\b", re.IGNORECASE)
 
 EXAMPLES = [
@@ -23,20 +24,23 @@ EXAMPLES = [
 class LLMStrategy:
     def __init__(self, db_path: Path):
         self.db_path = db_path
-        self.provider = os.getenv('LLM_PROVIDER', 'none').lower()
-        self.api_key = os.getenv('OPENAI_API_KEY')
-        # Allow custom base URL for Azure/OpenAI proxies
-        self.base_url = os.getenv('OPENAI_BASE_URL', 'https://api.openai.com/v1')
-        # Attempt to load .env if not already loaded and api key missing
-        if not self.api_key:
+        # Attempt to load .env first if environment variables not set
+        provider_env = os.getenv('LLM_PROVIDER')
+        api_key_env = os.getenv('OPENAI_API_KEY')
+        
+        if not provider_env or not api_key_env:
             try:
                 from dotenv import load_dotenv
                 env_path = ROOT / '.env'
                 if env_path.exists():
                     load_dotenv(dotenv_path=env_path, override=False)
-                    self.api_key = os.getenv('OPENAI_API_KEY')
             except Exception:
                 pass
+        
+        self.provider = os.getenv('LLM_PROVIDER', 'none').lower()
+        self.api_key = os.getenv('OPENAI_API_KEY')
+        # Allow custom base URL for Azure/OpenAI proxies
+        self.base_url = os.getenv('OPENAI_BASE_URL', 'https://api.openai.com/v1')
 
     def available(self) -> bool:
         return self.provider == 'openai' and bool(self.api_key)
@@ -98,9 +102,16 @@ class LLMStrategy:
             return None, 'ERROR'
         if not sql_text:
             return None, 'EMPTY'
-        sql = sql_text.strip().split('\n')[0]
+        # Extract SQL - handle both single and multi-line responses
+        sql = sql_text.strip()
+        # Remove markdown code fences if present
+        if sql.startswith('```'):
+            sql = '\n'.join(sql.split('\n')[1:-1]).strip()
+        # Join multi-line SQL into single line
+        sql = ' '.join(sql.split())
         if debug:
-            print("LLM_DEBUG_RAW_SQL:", sql)
+            print("LLM_DEBUG_RAW_RESPONSE:", repr(sql_text))
+            print("LLM_DEBUG_PROCESSED_SQL:", sql)
         # Canonical name sanitation fixes (LLM often shortens canonical names)
         replacements = [
             ("canonical_name='Revenue'", "canonical_name='Revenue from Operation'"),
@@ -118,8 +129,28 @@ class LLMStrategy:
             return None, 'UNSAFE'
         schema = self._schema_summary()
         known_tables = {line.split('(')[0] for line in schema.splitlines()}
-        pattern_tables = re.findall(r"FROM\s+(\w+)|JOIN\s+(\w+)", sql, re.IGNORECASE)
+        
+        # Extract CTE names from WITH clauses to exclude from validation
+        cte_names = set()
+        if sql.upper().startswith('WITH'):
+            # Find all CTE names: "WITH name AS (...), name2 AS (...)"
+            cte_pattern = re.findall(r'\bWITH\s+(\w+)\s+AS|,\s*(\w+)\s+AS', sql, re.IGNORECASE)
+            cte_names = {name for pair in cte_pattern for name in pair if name}
+        
+        # Remove string literals first to avoid false matches
+        sql_no_strings = re.sub(r"'[^']*'", '', sql)
+        pattern_tables = re.findall(r"FROM\s+(\w+)|JOIN\s+(\w+)", sql_no_strings, re.IGNORECASE)
         flat_tables = {t for pair in pattern_tables for t in pair if t}
-        if not flat_tables.issubset(known_tables):
+        
+        # Exclude CTE names from validation - they're not real tables
+        tables_to_validate = flat_tables - cte_names
+        
+        if debug:
+            print(f"LLM_DEBUG_KNOWN_TABLES: {known_tables}")
+            print(f"LLM_DEBUG_CTE_NAMES: {cte_names}")
+            print(f"LLM_DEBUG_FOUND_TABLES: {flat_tables}")
+            print(f"LLM_DEBUG_TABLES_TO_VALIDATE: {tables_to_validate}")
+            print(f"LLM_DEBUG_TABLES_VALID: {tables_to_validate.issubset(known_tables)}")
+        if not tables_to_validate.issubset(known_tables):
             return None, 'UNKNOWN_TABLE'
         return sql, 'OK'
